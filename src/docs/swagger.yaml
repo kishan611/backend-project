@@ -1,0 +1,402 @@
+openapi: 3.0.0
+info:
+  title: Interview Slot Booking API
+  description: API for Admins to manage interview slots and Candidates to book them.
+  version: 1.0.0
+servers:
+  - url: http://localhost:3000/api
+    description: Local Development Server
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    # --- Data Models ---
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+          enum: [ADMIN, CANDIDATE]
+
+    Slot:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        date:
+          type: string
+          format: date
+          example: "2026-01-30"
+        startTime:
+          type: string
+          example: "10:00"
+        endTime:
+          type: string
+          example: "11:00"
+        totalCapacity:
+          type: integer
+          example: 5
+        bookedCount:
+          type: integer
+          example: 1
+        isAvailable:
+          type: boolean
+
+    Booking:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        slotId:
+          type: string
+          format: uuid
+        candidateId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [BOOKED, CANCELLED]
+        bookedAt:
+          type: string
+          format: date-time
+
+    # --- UPDATED ERROR SCHEMA (Strict Format) ---
+    Error:
+      type: object
+      required:
+        - success
+        - message
+      properties:
+        success:
+          type: boolean
+          description: Always false for errors
+          example: false
+        message:
+          type: string
+          description: High-level summary of the error
+          example: "Validation Error"
+        errors:
+          type: array
+          description: List of specific error details
+          items:
+            type: string
+          example: ["Email is invalid", "Password is too short"]
+
+paths:
+  # --------------------
+  # Auth Routes
+  # --------------------
+  /auth/register:
+    post:
+      summary: Register a new user
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email, password, role]
+              properties:
+                name:
+                  type: string
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  format: password
+                role:
+                  type: string
+                  enum: [ADMIN, CANDIDATE]
+      responses:
+        '201':
+          description: User created successfully
+        '400':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Email already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /auth/login:
+    post:
+      summary: Login user
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                password:
+                  type: string
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # --------------------
+  # Slot Routes (Admin)
+  # --------------------
+  /slots:
+    get:
+      summary: List available slots
+      tags: [Slots]
+      parameters:
+        - in: query
+          name: date
+          schema:
+            type: string
+            format: date
+          description: Filter by specific date (YYYY-MM-DD)
+    
+      responses:
+        '200':
+          description: List of slots
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Slot'
+        '400':
+          description: Invalid query parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    post:
+      summary: Create a new slot (Admin only)
+      tags: [Slots]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [date, startTime, endTime, totalCapacity]
+              properties:
+                date:
+                  type: string
+                  format: date
+                startTime:
+                  type: string
+                  example: "14:00"
+                endTime:
+                  type: string
+                  example: "15:00"
+                totalCapacity:
+                  type: integer
+                  minimum: 1
+      responses:
+        '201':
+          description: Slot created successfully
+        '400':
+          description: Validation Error (e.g., start time > end time)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized (Token missing/invalid)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden (Not an Admin)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Conflict (Time overlap)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /slots/{id}:
+    put:
+      summary: Update a slot (Admin only)
+      tags: [Slots]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+          description: Slot ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                startTime:
+                  type: string
+                endTime:
+                  type: string
+                totalCapacity:
+                  type: integer
+      responses:
+        '200':
+          description: Slot updated successfully
+        '400':
+          description: Validation Error or Capacity less than booked count
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden (Not owner of slot)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Slot not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    delete:
+      summary: Delete a slot (Admin only)
+      tags: [Slots]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Slot deleted successfully
+        '403':
+          description: Forbidden (Not owner)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Slot not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Conflict (Cannot delete slot with bookings)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # --------------------
+  # Booking Routes (Candidate)
+  # --------------------
+  /bookings:
+    get:
+      summary: List my bookings (Candidate only)
+      tags: [Bookings]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of user bookings
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Booking'
+        '500':
+          description: Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    post:
+      summary: Book a slot (Candidate only)
+      tags: [Bookings]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [slotId]
+              properties:
+                slotId:
+                  type: string
+                  description: The ID of the slot to book
+      responses:
+        '201':
+          description: Booking successful
+        '400':
+          description: Invalid Slot ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Slot not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Conflict (Duplicate booking or Slot full)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
