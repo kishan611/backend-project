@@ -1,0 +1,42 @@
+pipeline:
+  name: Hello-World
+  identifier: HelloWorld
+  projectIdentifier: default_project
+  orgIdentifier: default
+  tags: {}
+  properties:
+    ci:
+      codebase:
+        connectorRef: github_connector
+        repoName: backend-project
+        build: <+input>
+  stages:
+    - stage:
+        name: Build Docker image
+        identifier: Build_Docker_image
+        description: ""
+        type: CI
+        spec:
+          cloneCodebase: true
+          caching:
+            enabled: true
+            override: true
+          buildIntelligence:
+            enabled: true
+          platform:
+            os: Linux
+            arch: Arm64
+          runtime:
+            type: Docker
+            spec: {}
+          execution:
+            steps:
+              - step:
+                  type: BuildAndPushDockerRegistry
+                  name: BuildAndPushDockerRegistry_1
+                  identifier: BuildAndPushDockerRegistry_1
+                  spec:
+                    connectorRef: DockerHarness
+                    repo: kishan611/ci-backend-project
+                    tags:
+                      - v1
