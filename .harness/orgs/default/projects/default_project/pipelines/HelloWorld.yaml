@@ -19,10 +19,11 @@ pipeline:
         spec:
           cloneCodebase: true
           caching:
-            enabled: true
+            enabled: false
             override: true
+            paths: []
           buildIntelligence:
-            enabled: true
+            enabled: false
           platform:
             os: Linux
             arch: Arm64
@@ -40,3 +41,5 @@ pipeline:
                     repo: kishan611/ci-backend-project
                     tags:
                       - v1
+        delegateSelectors:
+          - docker-delegate0
